@@ -1,1 +1,1 @@
-Proyecto Delilah Restó
+PROYECTO DELILAH RESTÓ
