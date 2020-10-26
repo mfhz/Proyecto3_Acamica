@@ -1,2 +1,5 @@
-node_modelus/
+node_modules/
 delilah_exports/
+package.json
+package-lock.json
+.DS_Store
