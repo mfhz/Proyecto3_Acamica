@@ -6,8 +6,8 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 // const sequelize = require('./conexion.js');
 const emailRegexp = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
-const nameRegexp = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
-const passRegexp = /^(?=.*\d)(?=.*[a-záéíóúüñ]).*[A-ZÁÉÍÓÚÜÑ]/;
+const passRegexp = /^(?=.*\d)(?=.*[a-záéíóúüñ]).*[A-ZÁÉÍÓÚÜÑ].*.[!#$%&'*+/=?^_`{|}~-]/;
+const userRegexp = /^(?=.*[.!#$%&'*+/=?^`{|}~-])/;
 
 let usuarios = [{'usuario': 'prueba', 'correo': 'prueba@prueba.com', 'contrasenia': 'prueba123456', 'nombre': 'Juan'}];
 
@@ -24,9 +24,9 @@ const limite = rateLimit({
 })
 
 
-server.post('/register', validarUser, validarPass, (req, res) => {
+server.post('/register', validarUser, validarPass, validarCorreo, (req, res) => {
     // console.log('ENTRO REGISTRO');
-    res.status(200).send('Usuario creado con éxito!');
+    res.status(200).json();
 })
 
 
@@ -46,8 +46,21 @@ function validarUser(req, res, next) {
     } else if (req.body.user.length < 5) {
         // console.log('Se requiere cinco o mas caracteres para el usuario');
         res.status(400).send('Se requiere cinco o mas caracteres para el usuario');
-    } else {
-        next();
+    } else if (userRegexp.test(req.body.user)) {
+        res.status(400).send('El nombre de usuario solo puede contener el caracter especial “_“');
+    } else if (req.body.user.length > 0) {
+        let espacios = false;
+        let cont = 0;
+        for (let i = 0; i < req.body.user.length; i++) {
+            if (req.body.user.charAt(cont) == " ")
+                espacios = true;
+                cont++;            
+        }
+        if (espacios) {
+            res.status(400).send('El nombre de usuario no puede contener espacios en blanco');
+        } else {
+            next();
+        }
     }
     
 }
@@ -60,7 +73,7 @@ function validarPass(req, res, next) {
     } else if(req.body.password.length < 8) {
         res.status(400).send('La contraseña debe contener mínimo 8 caracteres');
     } else if (!passRegexp.test(req.body.password)) {
-        res.status(400).send('La contraseña debe contener mayúsculas minúsculas y al menos un dígito');
+        res.status(400).send('La contraseña debe contener mayúsculas, minúsculas, al menos un dígito y un caracter especial');
     } else if (req.body.password.length > 0) {
         let espacios = false;
         let cont = 0;
@@ -77,14 +90,17 @@ function validarPass(req, res, next) {
     }
 }
 
-// function validarCorreo(req, res, next) {
-//     // console.log(req.body.correo);
-//     if (emailRegexp.test(req.body.email)) {        
-//         return next();
-//     } else {
-//         res.status(200).json('El correo ingresado es incorrecto');
-//     }
-// }
+/// Valida el correo al registrarse.
+function validarCorreo(req, res, next) {
+    // console.log(req.body.correo);
+    if (!req.body.email || req.body.email == '') {        
+        res.status(400).send('El correo no puede estar vacio y es un campo obligatorio para registrarse');
+    }else if (emailRegexp.test(req.body.email)) {
+        return next();
+    } else {
+        res.status(400).send('El correo ingresado es incorrecto');
+    }
+}
 
 
 
