@@ -8,8 +8,10 @@ const rateLimit = require('express-rate-limit');
 const emailRegexp = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
 const passRegexp = /^(?=.*\d)(?=.*[a-záéíóúüñ]).*[A-ZÁÉÍÓÚÜÑ].*.[!#$%&'*+/=?^_`{|}~-]/;
 const userRegexp = /^(?=.*[.!#$%&'*+/=?^`{|}~-])/;
+const numberRegexp = /^[0-9]*$/;
+const textRegexp =  /^[a-zA-Z ]+$/;
 
-let usuarios = [{'usuario': 'prueba', 'correo': 'prueba@prueba.com', 'contrasenia': 'prueba123456', 'nombre': 'Juan'}];
+let usuarios = [{'user': 'test', 'correo': 'prueba@prueba.com', 'pass': '123', 'nombre': 'Juan'}];
 
 server.use(helmet());
 server.listen(3000, () => {
@@ -24,11 +26,16 @@ const limite = rateLimit({
 })
 
 
-server.post('/register', validarUser, validarPass, validarCorreo, (req, res) => {
+
+server.post('/register', validarUser, validarNames, validarEmail, validarPhone, validarAddress, validarPass,  (req, res) => {
     // console.log('ENTRO REGISTRO');
-    res.status(200).json();
+    res.status(200).json({mje: "Registro Exitoso", status: 200});
+    
 })
 
+server.post('/login', validarAccount, (req, res) => {
+    res.status(200).json({status: '200', user: `${req.body.user}`});
+})
 
 
 
@@ -65,6 +72,16 @@ function validarUser(req, res, next) {
     
 }
 
+function validarNames(req, res, next) {
+    if (!req.body.names || req.body.names == '') {
+        res.status(400).send('El campo de nombres no puede estar vacío');
+    } else if (!textRegexp.test(req.body.names)) {
+        res.status(400).send('El campo de nombres no debe contener ningún dígito numérico ni caracter especial');                   
+    } else {
+        next();
+    }   
+}
+
 /// Valida varios parametros para la contraseñña al registrarse.
 function validarPass(req, res, next) {
 
@@ -91,7 +108,7 @@ function validarPass(req, res, next) {
 }
 
 /// Valida el correo al registrarse.
-function validarCorreo(req, res, next) {
+function validarEmail(req, res, next) {
     // console.log(req.body.correo);
     if (!req.body.email || req.body.email == '') {        
         res.status(400).send('El correo no puede estar vacio y es un campo obligatorio para registrarse');
@@ -102,5 +119,41 @@ function validarCorreo(req, res, next) {
     }
 }
 
+// Valida campo numérico 
+function validarPhone(req, res, next) {
+    let number = req.body.phone.toString();
+    if (!req.body.phone || req.body.phone == '') {
+        res.status(400).send('El número telefónico no puede estar vacío');
+    } else if (!numberRegexp.test(req.body.phone)) {
+        res.status(400).send('El campo solo debe ser numérico');
+    } else if (number.length != 10) {
+        res.status(400).send('El número ingresado debe contener 10 dígitos');
+    } else {
+        next();
+    }
+}
+
+//Validar campo de dirección
+function validarAddress(req, res, next) {
+    if (!req.body.address || req.body.address == '') {
+        res.status(400).send('El campo de dirección es obligatorio');
+    } else {
+        next();       
+    }
+}
+
+// Valida cuenta al iniciar sesion
+function validarAccount(req, res, next) {
+    const validarDatos = usuarios.findIndex(base => {
+        // console.log(base.user);        
+        return base.user == req.body.user && base.pass == req.body.password;
+    });
+    console.log(validarDatos);
+    if (validarDatos == 0) {
+        next();
+    } else {
+        res.status(400).send('La cuenta no coincide');
+    }
+}
 
 
