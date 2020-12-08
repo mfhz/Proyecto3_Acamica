@@ -40,6 +40,20 @@ server.post('/login', validarAccount, (req, res) => {
 
 
 // Middlewares Functions
+
+
+
+
+
+
+
+
+
+
+
+
+
+/**** Validación de Registro ****/
 /// Valida varios parametros para el nombre del usuario al registrarse.
 function validarUser(req, res, next) {
     // console.log(req.body);
@@ -72,6 +86,7 @@ function validarUser(req, res, next) {
     
 }
 
+/// Valida el nombre ingresado
 function validarNames(req, res, next) {
     if (!req.body.names || req.body.names == '') {
         res.status(400).send('El campo de nombres no puede estar vacío');
