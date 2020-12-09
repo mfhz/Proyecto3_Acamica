@@ -1,29 +1,137 @@
+/* Express */
 const express = require('express');
 const server = express();
-const bodyParser = require('body-parser');
+/* JWT */
 const jwt = require('jsonwebtoken');
+const signing = 'mafhz';
+/* DB Connection */
+const { db_host, db_name, db_user, db_password, db_port } = require("./conexion.js");
+const Sequelize = require('sequelize');
+const sequelize = new Sequelize(`mysql://${db_user}:${db_password}@${db_host}:${db_port}/${db_name}`);
+const { QueryTypes } = require("sequelize");
+/* Middleware */
+const bodyParser = require('body-parser');
+/* CSP Seguridad */
 const helmet = require('helmet');
-const rateLimit = require('express-rate-limit');
-// const sequelize = require('./conexion.js');
+/* Expresiones regular */
 const emailRegexp = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
 const passRegexp = /^(?=.*\d)(?=.*[a-záéíóúüñ]).*[A-ZÁÉÍÓÚÜÑ].*.[!#$%&'*+/=?^_`{|}~-]/;
 const userRegexp = /^(?=.*[.!#$%&'*+/=?^`{|}~-])/;
 const numberRegexp = /^[0-9]*$/;
 const textRegexp =  /^[a-zA-Z ]+$/;
 
-let usuarios = [{'user': 'test', 'correo': 'prueba@prueba.com', 'pass': '123', 'nombre': 'Juan'}];
-
+/* Server Setup */
 server.use(helmet());
+server.use(bodyParser.json());
+server.use(bodyParser.urlencoded({ extended: false }));
 server.listen(3000, () => {
     console.log('Servivor Inicializado');
 })
-server.use(bodyParser.urlencoded({ extended: false }));
-server.use(bodyParser.json());
 
-const limite = rateLimit({
-    windowMs: 60 * 60 * 1000,
-    max: 10
-})
+
+// Endpoints
+
+/**** Productos ****/
+///Endpoint donde se obtiene todos los productos
+server.get('/delilah/v1/products', async (req, res) => {
+    const products = await obtenerDatosBD("products", "disabled", false, true);
+	res.status(200).json(products);
+});
+
+///Endpoint donde se crean productos
+server.post('/delilah/v1/products', async (req, res) => {
+    const { name, price, imgUrl, description } = req.body;
+    try {
+        if (name && price && imgUrl && description) {
+            const sendBD = await sequelize.query(
+                'INSERT INTO products (product_name, price, product_img, description) VALUES (:name, :price, :imgUrl, :description)',
+                { replacements: {name, price, imgUrl, description}}
+            );
+            console.log('Producto creado correctamente', sendBD);
+            res.status(200).json(sendBD);
+        } else {
+            res.status(400).send('Todos los campos son necesarios')
+        }
+    } catch (error) {
+        console.log('Ah ocurrido un error....' + error);
+    }
+});
+
+///Endpoint para buscar productos por su ID
+server.get('/delilah/v1/products/:id', async (req, res) => {
+    const productId = req.params.id;
+    const searchProductId = await obtenerDatosBD('products', 'product_id', productId);
+    searchProductId ? res.status(200).json(searchProductId) : res.status(404).send('El ID ingresado no existe');
+});
+
+
+///Endpoint donde se modifican los productos por su ID
+server.put('/delilah/v1/products/:id', async (req, res) => {
+    console.log('PUT');
+    const productId = req.params.id;
+	try {
+		// const productFound = await getByParam("products", "productID", productId);
+		const productBD = await obtenerDatosBD("products", "product_id", productId);
+		if (productBD) {
+			const { name, price, imgUrl, description, disabled } = req.body;
+			// La propiedad filterEmptyProps saca los campos nulos o indefinidos y lo que si exista lo guarda en un nuevo objeto
+			const productFilter = filterProps({ name, price, imgUrl, description, disabled });
+			console.log(productFilter);
+			// En esta variable se guarda el objeto de los Props filtrados, en caso de que no hayan valores por defecto traera los que tiene en la BD
+			const newProduct = { ...productBD, ...productFilter };
+			console.log('ACA');
+			console.log(newProduct);
+			const updateBD = await sequelize.query(
+				"UPDATE products SET product_name = :name, price = :price, product_img = :imgUrl, description = :description, disabled = :disabled WHERE product_id = :id",
+				{					
+					replacements: {
+						id: productId,
+						name: newProduct.product_name,
+						price: newProduct.price,
+						imgUrl: newProduct.product_img,
+						description: newProduct.description,
+						disabled: newProduct.disabled,
+					},
+				},				
+			);
+			res.status(200).send(`El producto con ID ${productId} se modificó correctamente`);
+		} else {
+			res.status(404).send("El ID ingresado no existe");
+		}		
+	} catch (error) {
+		res.status(500).send("Ah ocurrido un error...." + error);
+	}
+
+	
+});
+
+
+/// Endpoint donde elimina los productos por su ID
+server.delete("/delilah/v1/products/:id", async (req, res) => {
+	const productId = req.params.id;
+	try {
+		const productBD = await obtenerDatosBD("products", "product_id", productId);
+		if (productBD) {
+			const updateBD = await sequelize.query("UPDATE products SET disabled = true WHERE product_id = :id", {
+				replacements: {
+					id: productId,
+				},
+			});
+			res.status(200).send(`El producto con ID ${productId} se eliminó correctamente`);
+		}
+	} catch (error) {
+		res.status(404).send("El ID ingresado no existe");
+	}
+});
+
+
+
+
+
+
+
+
+
 
 
 
@@ -33,21 +141,28 @@ server.post('/register', validarUser, validarNames, validarEmail, validarPhone, 
     
 })
 
-server.post('/login', validarAccount, (req, res) => {
+server.post('/login', (req, res) => {
     res.status(200).json({status: '200', user: `${req.body.user}`});
 })
 
 
 
-// Middlewares Functions
+// Middlewares & Functions
 
+/**** Función donde consula a la BD ****/
+async function obtenerDatosBD(tabla, tablaParametros = 'TRUE', input = 'TRUE', completo = false) {
+	const results = await sequelize.query(`SELECT * FROM ${tabla} WHERE ${tablaParametros} = :replacementParam`, {
+		replacements: { replacementParam: input },
+		type: QueryTypes.SELECT,
+    });
+	return results.length > 0 ? (completo ? results :  results[0]) : false;
+}
 
-
-
-
-
-
-
+/**** Funcion donde verifica si un objeto tiene campos nulos o indefinidos y los que tienen valor los guarda en un nuevo objeto****/
+function filterProps(object) {
+    Object.keys(object).forEach((key) => !object[key] && delete object[key]);
+	return object;
+}
 
 
 
@@ -154,20 +269,6 @@ function validarAddress(req, res, next) {
         res.status(400).send('El campo de dirección es obligatorio');
     } else {
         next();       
-    }
-}
-
-// Valida cuenta al iniciar sesion
-function validarAccount(req, res, next) {
-    const validarDatos = usuarios.findIndex(base => {
-        // console.log(base.user);        
-        return base.user == req.body.user && base.pass == req.body.password;
-    });
-    console.log(validarDatos);
-    if (validarDatos == 0) {
-        next();
-    } else {
-        res.status(400).send('La cuenta no coincide');
     }
 }
 
