@@ -32,6 +32,7 @@ server.listen(3000, () => {
 // Endpoints
 
 /**** Productos ****/
+
 ///Endpoint donde se obtiene todos los productos
 server.get('/delilah/v1/products', async (req, res) => {
     const products = await obtenerDatosBD("products", "disabled", false, true);
@@ -66,21 +67,19 @@ server.get('/delilah/v1/products/:id', async (req, res) => {
 
 
 ///Endpoint donde se modifican los productos por su ID
-server.put('/delilah/v1/products/:id', async (req, res) => {
-    console.log('PUT');
+server.put('/delilah/v1/products/:id', validateToken, async (req, res) => {
     const productId = req.params.id;
 	try {
 		// const productFound = await getByParam("products", "productID", productId);
 		const productBD = await obtenerDatosBD("products", "product_id", productId);
 		if (productBD) {
-			const { name, price, imgUrl, description, disabled } = req.body;
+			const { product_name, price, product_img, description, disabled } = req.body;
 			// La propiedad filterEmptyProps saca los campos nulos o indefinidos y lo que si exista lo guarda en un nuevo objeto
-			const productFilter = filterProps({ name, price, imgUrl, description, disabled });
-			console.log(productFilter);
+			const productFilter = filterProps({ product_name, price, product_img, description, disabled });
 			// En esta variable se guarda el objeto de los Props filtrados, en caso de que no hayan valores por defecto traera los que tiene en la BD
-			const newProduct = { ...productBD, ...productFilter };
-			console.log('ACA');
-			console.log(newProduct);
+            const newProduct = { ...productBD, ...productFilter };
+            console.log(productFilter);
+            console.log(newProduct);
 			const updateBD = await sequelize.query(
 				"UPDATE products SET product_name = :name, price = :price, product_img = :imgUrl, description = :description, disabled = :disabled WHERE product_id = :id",
 				{					
@@ -106,7 +105,7 @@ server.put('/delilah/v1/products/:id', async (req, res) => {
 });
 
 
-/// Endpoint donde elimina los productos por su ID
+///Endpoint donde elimina los productos por su ID
 server.delete("/delilah/v1/products/:id", async (req, res) => {
 	const productId = req.params.id;
 	try {
@@ -125,25 +124,283 @@ server.delete("/delilah/v1/products/:id", async (req, res) => {
 });
 
 
+/**** Usuarios ****/
+
+///Endpoint al hacer login entrega token 
+server.get("/delilah/v1/users/login", async (req, res) => {
+	const { username, email, password } = req.body;
+	try {
+        const userBD = await obtenerDatosBD("users", "user_name", username);
+		const emailBD = await obtenerDatosBD("users", "mail", email);
+        if ((username || email) && password) {
+            if (userBD.disabled || emailBD.disabled) {
+                res.status(401).send("La cuenta está deshabilitada");
+            } else if (userBD.password === password) {
+                const token = generateToken({
+                    user: userBD.user_name,
+                    id: userBD.user_id,
+                    isAdmin: userBD.admin,
+                    isDisabled: userBD.disabled,
+                });
+                res.status(200).json(token);
+            } else if (emailBD.password === password) {
+                const token = generateToken({
+                    user: emailBD.user_name,
+                    id: emailBD.user_id,
+                    isAdmin: emailBD.admin,
+                    isDisabled: emailBD.disabled,
+                });
+                res.status(200).json(token);
+            } else {
+                res.status(400).send("Usuario/Correo o contraseña incorrectos");
+            }
+        } else {
+            res.status(400).send("Se debe ingresar usuario/correo y contraseña");
+        }
+		
+	} catch (error) {
+		res.status(500).send("Ah ocurrido un error...." + error);
+	}
+});
 
 
-
-
-
-
-
-
-
-
-server.post('/register', validarUser, validarNames, validarEmail, validarPhone, validarAddress, validarPass,  (req, res) => {
-    // console.log('ENTRO REGISTRO');
-    res.status(200).json({mje: "Registro Exitoso", status: 200});
+///Endpoint para: traer todos los usuarios registrados solo por el administrador o si es usuario normal el detalle de la cuenta.
+server.get("/delilah/v1/users", validateToken, async (req, res) => {
+    const admin = req.tokenInfo.isAdmin;
+    // const admin = false;
+    const userId = req.tokenInfo.id;
+    // const userId = 2;
+    try {
+        let filterUser = [];
+        if (admin) {
+            const userBD = await obtenerDatosBD("users", true, true, true);
+            filterUser = userBD.map((account) => {
+                delete account.password;
+                return account;
+            });
+        } else {
+            const userBD = await obtenerDatosBD("users", "user_id", userId, true);
+            filterUser = userBD.map((account) => {
+                delete account.password;
+                delete account.admin;
+                delete account.disabled;
+                return account;
+            });
+        }
     
-})
+        if (filterUser.length > 0) {
+            res.status(200).json(filterUser);
+        } else { 
+            res.status(404).json("User not found");
+        }
+    } catch (error) {
+        res.status(500).send("Ah ocurrido un error...." + error);
+    }
+});
+    
 
-server.post('/login', (req, res) => {
-    res.status(200).json({status: '200', user: `${req.body.user}`});
-})
+///Endpoint para crear usuarios
+server.post("/delilah/v1/users", async (req, res) => {
+	const { username, password, email, address, fullName, phone } = req.body;	
+	try {
+		const userBD = await obtenerDatosBD("users", "user_name", username);
+		const emailBD = await obtenerDatosBD("users", "mail", email);
+		if (userBD) {
+			res.status(409).json("El usuario ingresado ya existe");
+			return;
+		}
+		if (emailBD) {
+			res.status(409).json("El correo ingresado ya existe");
+			return;
+		}
+		if ((username && password && email && address && fullName && phone)) {
+			const updateBD = await sequelize.query(
+				"INSERT INTO users (user_name, password, full_name, mail, phone, address) VALUES (:username, :password, :fullName, :email, :phone, :address)",
+				{ replacements: { username, password, fullName, email, phone, address } }
+			);
+			res.status(200).json("Usuario creado correctamente");
+		} else {
+			res.status(400).send("Todos los campos son necesarios para registrarse");
+		}
+	} catch (error) {
+		res.status(500).send("Ah ocurrido un error...." + error);
+	}
+});
+
+
+///Endpoint para actualizar informacion del usuario
+server.put("/delilah/v1/users", validateToken, async (req, res) => {
+    const token = req.tokenInfo;
+    const usernameToken = token.user;
+    try {
+        const userBD = await obtenerDatosBD("users", "user_name", usernameToken);
+        const userId = userBD.user_id;
+        if (userBD) {
+            const { user_name, full_name, mail, phone, address } = req.body;
+            if (user_name || mail || address || full_name || phone) {
+                const existingUsername = await obtenerDatosBD("users", "user_name", user_name);
+                const existingEmail = await obtenerDatosBD("users", "mail", mail);
+                if (compareDataBD(token.id, existingUsername.user_id)) {
+                    res.status(409).json("El usuario ya existe, porfavor intenta con otro");
+                    return;
+                }
+                if (compareDataBD(token.id, existingEmail.user_id)) {
+                    res.status(409).json("El correo ya existe, porfavor intenta con otro");
+                    return;
+                }
+                const userFilter = filterProps({ user_name, full_name, mail, phone, address });
+                const newUser = { ...userBD, ...userFilter };
+                const updateBD = await sequelize.query(
+                    "UPDATE users SET user_name = :user, full_name = :fullName, mail = :mail, phone = :phone, address = :address WHERE user_id = :userId",
+                    {
+                        replacements: {
+                            user: newUser.user_name,
+                            fullName: newUser.full_name,
+                            mail: newUser.mail,
+                            phone: newUser.phone,
+                            address: newUser.address,
+                            userId: userId,
+                        },
+                    }
+                );
+                res.status(200).send("Usuario actualizado correctamente");
+            } else {
+                res.status(400).send("Debe haber por lo menos un campo para actualizar");
+            }
+        } else {
+            res.status(404).json("El usuario ingresado no existe");
+        }
+    } catch (error) {
+        res.status(500).send("Ah ocurrido un error...." + error);
+    }
+});
+    
+
+///Endpoint para colocar el usuario actual deshabilitado
+server.delete("/delilah/v1/users", validateToken, async (req, res) => {	
+    try {
+        const token = req.tokenInfo;
+        const userId = token.id;
+        const updateBD = await sequelize.query(`UPDATE users SET disabled = true WHERE user_id = :userId`, {
+            replacements: {
+                userId: userId,
+            },
+        });
+        res.status(200).json("La cuenta se actualizó a estado deshabilitada");
+    } catch (error) {
+        res.status(500).send("Ah ocurrido un error...." + error);
+    }
+});
+  
+
+///Endpoint para buscar usuarios en especifico (Solo Administrador)
+server.get("/delilah/v1/users/:username", validateToken, async (req, res) => {
+    const token = req.tokenInfo;
+	const username = req.params.username;
+	try {
+		if (token.isAdmin) {
+            const userBD = await obtenerDatosBD("users", "user_name", username);
+		    if (userBD) {
+		    	res.status(200).json(userBD);
+		    } else {
+		    	res.status(404).json("El usuario ingresado no existe");
+		    }
+        } else {
+            res.status(401).json("Acceso denegado, la cuenta debe ser administrador");
+        }
+	} catch (error) {
+		res.status(500).send("Ah ocurrido un error...." + error);
+	}
+});
+
+
+///Endpoint para actualizar usuario en especifico (Solo Administrador)
+server.put("/delilah/v1/users/:username", validateToken, async (req, res) => {
+    const usernameBody = req.params.username;
+    const token = req.tokenInfo;
+	try {
+        if (token.isAdmin) {
+            const { user_name, password, full_name, mail, phone, address, disabled } = req.body;
+            if (user_name || password || mail || address || full_name || phone || disabled) {
+                const userBD = await obtenerDatosBD("users", "user_name", usernameBody);
+                const userId = userBD.user_id;
+                console.log(userBD);
+                if (!userBD) {
+                    res.status(404).json("El usuario ingresado no existe");
+                    return;
+                }
+                const existingUsername = await obtenerDatosBD("users", "user_name", user_name, true);
+                const existingEmail = await obtenerDatosBD("users", "mail", mail, true);
+                const repeatedUsername = existingUsername && existingUsername.map((user) => compareDataBD(userId, userBD.user_id));
+                const repeatedEmail = existingEmail && existingEmail.map((user) => compareDataBD(userId, userBD.user_id));
+                if (repeatedUsername && repeatedUsername.some((value) => value === true)) {
+                    res.status(409).json("El usuario ya existe, porfavor intenta con otro");
+                    return;
+                }
+                if (repeatedEmail && repeatedEmail.some((value) => value === true)) {
+                    res.status(409).json("El correo ya existe, porfavor intenta con otro");
+                    return;
+                }
+                const userFilter = filterProps({ user_name, password, full_name, mail, phone, address, disabled });
+                const newUser = { ...userBD, ...userFilter };
+                const update = await sequelize.query(
+                    `UPDATE users SET user_name = :user, password = :pass, full_name = :fullname, mail = :mail, phone = :phone, address = :deliveryAddress, disabled = :disabled WHERE user_id = :userId`,
+                    {
+                        replacements: {
+                            user: newUser.user_name,
+                            pass: newUser.password,
+                            fullname: newUser.full_name,
+                            mail: newUser.mail,
+                            phone: newUser.phone,
+                            deliveryAddress: newUser.address,
+                            userId: userId,
+                            disabled: newUser.disabled,
+                        },
+                    }
+                );
+                res.status(200).send(`El usuario ${userBD.user_name} fue actualizado correctamente`);
+            } else {
+                res.status(400).send("Debe haber por lo menos un campo para actualizar");
+            }
+        } else {
+            res.status(401).json("Acceso denegado, la cuenta debe ser administrador");
+        }
+	} catch (error) {
+		res.status(500).send("Ah ocurrido un error...." + error);
+	}
+});
+
+
+///Endpoint para colocar cualquier usuario deshabilitado
+server.delete("/delilah/v1/users/:username", validateToken, async (req, res) => {
+    const usernameBody = req.params.username;
+    const token = req.tokenInfo;
+	try {
+		if (token.isAdmin) {
+            const userBD = await obtenerDatosBD("users", "user_name", usernameBody);
+            const userId = userBD.user_id;
+            if (!userBD) {
+                res.status(404).json("El usuario ingresado no existe");
+                return;
+            }
+            const update = await sequelize.query("UPDATE users SET disabled = true WHERE user_id = :userId", {
+                replacements: {
+                    userId: userId,
+                },
+            });
+            res.status(200).send(`El usuario ${userBD.user_name} se encuentra deshabilitado`);
+        } else {
+            res.status(401).json("Acceso denegado, la cuenta debe ser administrador");
+        }
+	} catch (error) {
+		res.status(500).send("Ah ocurrido un error...." + error);
+	}
+});
+
+
+
+
+
 
 
 
@@ -159,16 +416,49 @@ async function obtenerDatosBD(tabla, tablaParametros = 'TRUE', input = 'TRUE', c
 }
 
 /**** Funcion donde verifica si un objeto tiene campos nulos o indefinidos y los que tienen valor los guarda en un nuevo objeto****/
-function filterProps(object) {
-    Object.keys(object).forEach((key) => !object[key] && delete object[key]);
-	return object;
+function filterProps(obj) {
+    Object.keys(obj).forEach((key) => !obj[key] && delete obj[key]);
+	return obj;
+}
+
+/**** Función donde se genera el Token ****/
+function generateToken(data) {
+	return jwt.sign(data, signing, { expiresIn: "50m" });
+}
+
+/**** Función donde verifica si el usuario o correo ingresado ya existe en la BD ****/
+function compareDataBD(token, body) {
+	if (body && token === body) {
+		console.log("El usuario o correo ya se encuentran en uso");
+		return true;
+	} else {
+		return false;
+	}
+}
+
+/**** Función para validar la firma del Token ****/
+async function validateToken(req, res, next) {
+	const tokenData = req.headers.authorization.split(" ")[1];
+	try {
+		const verification = jwt.verify(tokenData, signing);
+		console.log('TOKEN')
+		console.log(verification);
+		const userBD = await obtenerDatosBD("users", "user_id", verification.id);
+        const isDisabled = userBD.disabled;
+		if (isDisabled) {
+			res.status(401).send("Acceso denegado, la cuenta está deshabilitada");
+		} else {
+			req.tokenInfo = verification;
+			next();
+		}
+	} catch (e) {
+		res.status(401).json("El token es invalido");
+	}
 }
 
 
-
-
-
 /**** Validación de Registro ****/
+
 /// Valida varios parametros para el nombre del usuario al registrarse.
 function validarUser(req, res, next) {
     // console.log(req.body);
