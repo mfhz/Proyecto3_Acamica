@@ -29,6 +29,8 @@ server.listen(3000, () => {
 })
 
 
+const validateOrderStatus = ["Nuevo", "Confirmado", "Preparando", "Enviando", "Entregado", "Cancelado"];
+
 // Endpoints
 
 /**** Productos ****/
@@ -396,6 +398,195 @@ server.delete("/delilah/v1/users/:username", validateToken, async (req, res) => 
 		res.status(500).send("Ah ocurrido un error...." + error);
 	}
 });
+
+
+/**** Pedidos ****/
+
+///Endpoint donde trae las ordenes (Si es admin muestra todas las ordenes, si es usuario normal traer las ordenes que el mismo pidió)
+server.get("/delilah/v1/orders", validateToken, async (req, res) => {
+	try {
+		let orders = [];
+		if (req.tokenInfo.isAdmin) {
+			orders = await sequelize.query(
+				"SELECT * FROM orders INNER JOIN users ON orders.user_id = users.user_id ORDER BY date DESC;",
+				{
+					type: QueryTypes.SELECT,
+				}
+			);
+		} else {
+			const userID = req.tokenInfo.id;
+			orders = await sequelize.query(
+				"SELECT * FROM orders INNER JOIN users ON orders.user_id = users.user_id WHERE users.user_id = :id ORDER BY date DESC;",
+				{
+					replacements: { id: userID },
+					type: QueryTypes.SELECT,
+				}
+			);
+        }
+        // Promesa donde por cada pedido se coloca el detalle del mismo generando un nuevo atributo mostrando el producto de ese pedido con su cantidad
+		const currentOrders = await Promise.all(            
+			orders.map(async (order) => {
+				const orderDetail = await sequelize.query(
+					"SELECT * FROM order_detail INNER JOIN products WHERE order_id = :id AND order_detail.product_id = products.product_id",
+					{
+						replacements: { id: order.order_id },
+						type: QueryTypes.SELECT,
+					}
+                );
+                order.orderDetail = orderDetail;
+				return order;
+			})
+        );
+		if (currentOrders.length > 0) {
+			const orderFilter = orders.map((user) => {
+				delete user.password;
+				delete user.admin;
+				delete user.disabled;
+				return user;
+			});
+			res.status(200).json(orderFilter);
+		} else {
+			res.status(404).send("No se encuentran pedidos en estos momentos");
+		}
+	} catch (error) {
+		res.status(500).send("Ah ocurrido un error...." + error);
+	}
+});
+
+
+///Endpoint para crear las ordenes
+server.post("/delilah/v1/orders", validateToken, async (req, res) => {
+	const userId = req.tokenInfo.id;
+    const { data, paymentMethod } = req.body;
+    console.log(data);
+    console.log(paymentMethod);
+	try {
+		if (data && paymentMethod) {
+            const getOrderDetails = await Promise.all(
+                data.map((product) => obtenerDatosBD("products", "product_id", product.product_id))                
+            );
+            console.log(getOrderDetails);
+            if (getOrderDetails.some((product) => product.disabled)) {
+                res.status(403).json("Some of the products selected is disabled or no longer available");
+            } else if (getOrderDetails.every((product) => !!product === true)) {
+                const orderData = async () => {
+                    let total = 0;
+                    let description = "";
+                    getOrderDetails.forEach((product, index) => {
+                        console.log(product);
+                        console.log(index);
+                        total += product.price * data[index].amount;
+                        description += `${data[index].amount}x ${product.product_name}, `;
+                        console.log(total);
+                        console.log(description);
+                    });                
+                    description = description.substring(0, description.length - 2);
+                    return [total, description];
+                };
+                const [total, description] = await orderData();
+                console.log([total, description]);
+                const order = await sequelize.query(
+                    "INSERT INTO orders (status, date, description, payment_method, total, user_id) VALUES (:status, :date, :description, :paymentMethod, :total, :userId)",
+                    { replacements: { status: "Nuevo", date: new Date(), description, paymentMethod, total, userId } }
+                );
+                console.log(order);
+                data.forEach(async (product) => {
+                    const order_products = await sequelize.query(
+                        "INSERT INTO order_detail (order_id, product_id, product_amount) VALUES (:orderID, :productID, :productAmount)",
+                        { replacements: { orderID: order[0], productID: product.product_id, productAmount: product.amount } }
+                    );
+                });
+                console.log(`La orden ${order[0]} fue creada`);
+                res.status(200).json("La orden ha sido generada correctamente");
+            } else {
+                res.status(400).send("Los datos ingresados nos son válidos");
+            }
+        } else {
+            res.status(400).send("Se debe especificar que producto y cantidad se va a adquirir");
+        }
+	} catch (error) {
+		res.status(500).send("Ah ocurrido un error...." + error);
+	}
+});
+
+
+///Endpoint para buscar pedidos por su ID
+server.get("/delilah/v1/orders/:id", validateToken, async (req, res) => {
+    const id = req.params.id;
+    const admin = req.tokenInfo.isAdmin;
+	try {
+		if (admin) {
+            const order = await sequelize.query(
+                "SELECT * FROM orders INNER JOIN users ON orders.user_id = users.user_id WHERE orders.order_id = :id;",
+                {
+                    replacements: { id: id },
+                    type: QueryTypes.SELECT,
+                }
+            );
+            console.log(order);
+            if (order.length > 0) {
+                order[0].orderDetail = await sequelize.query(
+                    "SELECT * FROM order_detail INNER JOIN products WHERE order_id = :id AND order_detail.product_id = products.product_id",
+                    {
+                        replacements: { id: order[0].order_id },
+                        type: QueryTypes.SELECT,
+                    }
+                );
+                delete order[0].password;
+                delete order[0].admin;
+                delete order[0].disabled;
+                res.status(200).json(order);
+            } else {
+                res.status(404).send(`El pedido ingresado con ID ${id} no existe`);
+            }
+        } else {
+            res.status(401).json("Acceso denegado, la cuenta debe ser administrador");
+        }
+	} catch (error) {
+		res.status(500).send("Ah ocurrido un error...." + error);
+	}
+});
+
+
+///Endpoint para actualizar los estados de las ordenes
+server.put("/delilah/v1/orders/:id", validateToken, async (req, res) => {
+    const id = req.params.id;
+    const admin = req.tokenInfo.isAdmin;
+	const { orderStatus } = req.body;
+	try {
+		if (admin) {
+            const order = await sequelize.query("SELECT * FROM orders WHERE order_id = :id;", {
+                replacements: { id: id },
+                type: QueryTypes.SELECT,
+            });
+            if (order.length > 0) {
+                if (validateOrderStatus.includes(orderStatus)) {
+                    const update = await sequelize.query("UPDATE orders SET status = :status WHERE order_id = :id", {
+                        replacements: {
+                            id: id,
+                            status: orderStatus,
+                        },
+                    });
+                    res.status(200).send(`La orden con ID ${id} fue actualizada correctamente`);
+                } else {
+                    res.status(403).send("El estado que ingresaste no existe");
+                }
+            } else {
+                res.status(404).send("Search didn't bring any results");
+            }
+        } else {
+            res.status(401).json("Acceso denegado, la cuenta debe ser administrador");
+        }
+	} catch (error) {
+		res.status(500).send("Ah ocurrido un error...." + error);
+	}
+});
+
+
+
+
+
+
 
 
 
