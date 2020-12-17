@@ -36,24 +36,29 @@ const validateOrderStatus = ["Nuevo", "Confirmado", "Preparando", "Enviando", "E
 /**** Productos ****/
 
 ///Endpoint donde se obtiene todos los productos
-server.get('/delilah/v1/products', async (req, res) => {
+server.get('/delilah/v1/products', validateToken, async (req, res) => {
     const products = await obtenerDatosBD("products", "disabled", false, true);
 	res.status(200).json(products);
 });
 
 ///Endpoint donde se crean productos
-server.post('/delilah/v1/products', async (req, res) => {
+server.post('/delilah/v1/products', validateToken, async (req, res) => {
     const { name, price, imgUrl, description } = req.body;
+    const admin = req.tokenInfo.isAdmin;
     try {
-        if (name && price && imgUrl && description) {
-            const sendBD = await sequelize.query(
-                'INSERT INTO products (product_name, price, product_img, description) VALUES (:name, :price, :imgUrl, :description)',
-                { replacements: {name, price, imgUrl, description}}
-            );
-            console.log('Producto creado correctamente', sendBD);
-            res.status(200).json(sendBD);
+        if (admin) {
+            if (name && price && imgUrl && description) {
+                const sendBD = await sequelize.query(
+                    'INSERT INTO products (product_name, price, product_img, description) VALUES (:name, :price, :imgUrl, :description)',
+                    { replacements: {name, price, imgUrl, description}}
+                );
+                console.log('Producto creado correctamente', sendBD);
+                res.status(200).json(sendBD);
+            } else {
+                res.status(400).send('Todos los campos son necesarios')
+            }
         } else {
-            res.status(400).send('Todos los campos son necesarios')
+            res.status(401).json("Acceso denegado, la cuenta debe ser administrador");
         }
     } catch (error) {
         console.log('Ah ocurrido un error....' + error);
@@ -61,7 +66,7 @@ server.post('/delilah/v1/products', async (req, res) => {
 });
 
 ///Endpoint para buscar productos por su ID
-server.get('/delilah/v1/products/:id', async (req, res) => {
+server.get('/delilah/v1/products/:id', validateToken, async (req, res) => {
     const productId = req.params.id;
     const searchProductId = await obtenerDatosBD('products', 'product_id', productId);
     searchProductId ? res.status(200).json(searchProductId) : res.status(404).send('El ID ingresado no existe');
@@ -71,34 +76,38 @@ server.get('/delilah/v1/products/:id', async (req, res) => {
 ///Endpoint donde se modifican los productos por su ID
 server.put('/delilah/v1/products/:id', validateToken, async (req, res) => {
     const productId = req.params.id;
+    const admin = req.tokenInfo.isAdmin;
 	try {
-		// const productFound = await getByParam("products", "productID", productId);
-		const productBD = await obtenerDatosBD("products", "product_id", productId);
-		if (productBD) {
-			const { product_name, price, product_img, description, disabled } = req.body;
-			// La propiedad filterEmptyProps saca los campos nulos o indefinidos y lo que si exista lo guarda en un nuevo objeto
-			const productFilter = filterProps({ product_name, price, product_img, description, disabled });
-			// En esta variable se guarda el objeto de los Props filtrados, en caso de que no hayan valores por defecto traera los que tiene en la BD
-            const newProduct = { ...productBD, ...productFilter };
-            console.log(productFilter);
-            console.log(newProduct);
-			const updateBD = await sequelize.query(
-				"UPDATE products SET product_name = :name, price = :price, product_img = :imgUrl, description = :description, disabled = :disabled WHERE product_id = :id",
-				{					
-					replacements: {
-						id: productId,
-						name: newProduct.product_name,
-						price: newProduct.price,
-						imgUrl: newProduct.product_img,
-						description: newProduct.description,
-						disabled: newProduct.disabled,
-					},
-				},				
-			);
-			res.status(200).send(`El producto con ID ${productId} se modificó correctamente`);
-		} else {
-			res.status(404).send("El ID ingresado no existe");
-		}		
+		if (admin) {
+            const productBD = await obtenerDatosBD("products", "product_id", productId);
+            if (productBD) {
+                const { product_name, price, product_img, description, disabled } = req.body;
+                // La propiedad filterEmptyProps saca los campos nulos o indefinidos y lo que si exista lo guarda en un nuevo objeto
+                const productFilter = filterProps({ product_name, price, product_img, description, disabled });
+                // En esta variable se guarda el objeto de los Props filtrados, en caso de que no hayan valores por defecto traera los que tiene en la BD
+                const newProduct = { ...productBD, ...productFilter };
+                console.log(productFilter);
+                console.log(newProduct);
+                const updateBD = await sequelize.query(
+                    "UPDATE products SET product_name = :name, price = :price, product_img = :imgUrl, description = :description, disabled = :disabled WHERE product_id = :id",
+                    {					
+                        replacements: {
+                            id: productId,
+                            name: newProduct.product_name,
+                            price: newProduct.price,
+                            imgUrl: newProduct.product_img,
+                            description: newProduct.description,
+                            disabled: newProduct.disabled,
+                        },
+                    },				
+                );
+                res.status(200).send(`El producto con ID ${productId} se modificó correctamente`);
+            } else {
+                res.status(404).send("El ID ingresado no existe");
+            }
+        } else {
+            res.status(401).json("Acceso denegado, la cuenta debe ser administrador");
+        }		
 	} catch (error) {
 		res.status(500).send("Ah ocurrido un error...." + error);
 	}
@@ -108,20 +117,27 @@ server.put('/delilah/v1/products/:id', validateToken, async (req, res) => {
 
 
 ///Endpoint donde elimina los productos por su ID
-server.delete("/delilah/v1/products/:id", async (req, res) => {
-	const productId = req.params.id;
+server.delete("/delilah/v1/products/:id", validateToken, async (req, res) => {
+    const productId = req.params.id;
+    const admin = req.tokenInfo.isAdmin;
 	try {
-		const productBD = await obtenerDatosBD("products", "product_id", productId);
-		if (productBD) {
-			const updateBD = await sequelize.query("UPDATE products SET disabled = true WHERE product_id = :id", {
-				replacements: {
-					id: productId,
-				},
-			});
-			res.status(200).send(`El producto con ID ${productId} se eliminó correctamente`);
-		}
+		if (admin) {
+            const productBD = await obtenerDatosBD("products", "product_id", productId);
+            if (productBD) {
+                const updateBD = await sequelize.query("UPDATE products SET disabled = true WHERE product_id = :id", {
+                    replacements: {
+                        id: productId,
+                    },
+                });
+                res.status(200).send(`El producto con ID ${productId} se eliminó correctamente`);
+            } else {
+                res.status(404).send("El ID ingresado no existe");
+            }
+        } else {
+            res.status(401).json("Acceso denegado, la cuenta debe ser administrador");
+        }
 	} catch (error) {
-		res.status(404).send("El ID ingresado no existe");
+		res.status(500).send("Ah ocurrido un error...." + error);
 	}
 });
 
@@ -193,7 +209,7 @@ server.get("/delilah/v1/users", validateToken, async (req, res) => {
         if (filterUser.length > 0) {
             res.status(200).json(filterUser);
         } else { 
-            res.status(404).json("User not found");
+            res.status(404).json("El usuario ingresado no existe");
         }
     } catch (error) {
         res.status(500).send("Ah ocurrido un error...." + error);
@@ -467,7 +483,7 @@ server.post("/delilah/v1/orders", validateToken, async (req, res) => {
             );
             console.log(getOrderDetails);
             if (getOrderDetails.some((product) => product.disabled)) {
-                res.status(403).json("Some of the products selected is disabled or no longer available");
+                res.status(403).json("En estos momentos no hay disponible este producto");
             } else if (getOrderDetails.every((product) => !!product === true)) {
                 const orderData = async () => {
                     let total = 0;
@@ -512,14 +528,14 @@ server.post("/delilah/v1/orders", validateToken, async (req, res) => {
 
 ///Endpoint para buscar pedidos por su ID
 server.get("/delilah/v1/orders/:id", validateToken, async (req, res) => {
-    const id = req.params.id;
+    const orderID = req.params.id;
     const admin = req.tokenInfo.isAdmin;
 	try {
 		if (admin) {
             const order = await sequelize.query(
                 "SELECT * FROM orders INNER JOIN users ON orders.user_id = users.user_id WHERE orders.order_id = :id;",
                 {
-                    replacements: { id: id },
+                    replacements: { id: orderID },
                     type: QueryTypes.SELECT,
                 }
             );
@@ -537,7 +553,7 @@ server.get("/delilah/v1/orders/:id", validateToken, async (req, res) => {
                 delete order[0].disabled;
                 res.status(200).json(order);
             } else {
-                res.status(404).send(`El pedido ingresado con ID ${id} no existe`);
+                res.status(404).send(`El pedido ingresado con ID ${orderID} no existe`);
             }
         } else {
             res.status(401).json("Acceso denegado, la cuenta debe ser administrador");
@@ -550,29 +566,29 @@ server.get("/delilah/v1/orders/:id", validateToken, async (req, res) => {
 
 ///Endpoint para actualizar los estados de las ordenes
 server.put("/delilah/v1/orders/:id", validateToken, async (req, res) => {
-    const id = req.params.id;
+    const orderID = req.params.id;
     const admin = req.tokenInfo.isAdmin;
 	const { orderStatus } = req.body;
 	try {
 		if (admin) {
             const order = await sequelize.query("SELECT * FROM orders WHERE order_id = :id;", {
-                replacements: { id: id },
+                replacements: { id: orderID },
                 type: QueryTypes.SELECT,
             });
             if (order.length > 0) {
                 if (validateOrderStatus.includes(orderStatus)) {
                     const update = await sequelize.query("UPDATE orders SET status = :status WHERE order_id = :id", {
                         replacements: {
-                            id: id,
+                            id: orderID,
                             status: orderStatus,
                         },
                     });
-                    res.status(200).send(`La orden con ID ${id} fue actualizada correctamente`);
+                    res.status(200).send(`La orden con ID ${orderID} fue actualizada correctamente`);
                 } else {
                     res.status(403).send("El estado que ingresaste no existe");
                 }
             } else {
-                res.status(404).send("Search didn't bring any results");
+                res.status(404).send(`La orden con ID ${orderID} no existe`);
             }
         } else {
             res.status(401).json("Acceso denegado, la cuenta debe ser administrador");
@@ -583,16 +599,30 @@ server.put("/delilah/v1/orders/:id", validateToken, async (req, res) => {
 });
 
 
-
-
-
-
-
-
-
-
-
-
+///Endpoint para deshabilitar un pedido en especifico
+server.delete("/delilah/v1/orders/:id", validateToken, async (req, res) => {
+    const orderID = req.params.id;
+    const admin = req.tokenInfo.isAdmin;
+	try {
+		if (admin) {
+            const orderBD = await obtenerDatosBD("orders", "order_id", orderID);
+            if (orderBD) {
+                const update = await sequelize.query("UPDATE orders SET isDisabled = true WHERE order_id = :order_id", {
+                    replacements: {
+                        order_id: orderID,
+                    },
+                });
+                res.status(200).send(`La orden con ID ${orderID} se deshabilitó correctamente`);
+            } else {
+                res.status(404).send(`La orden con ID ${orderID} no existe`);
+            }
+        } else {
+            res.status(401).json("Acceso denegado, la cuenta debe ser administrador");
+        }
+	} catch (error) {
+		res.status(500).send("Ah ocurrido un error...." + error);
+	}
+});
 
 
 // Middlewares & Functions

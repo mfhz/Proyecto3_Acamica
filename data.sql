@@ -20,6 +20,7 @@ CREATE TABLE orders (
   payment_method VARCHAR (60) NOT NULL,
   total FLOAT NOT NULL,
   user_id INT NOT NULL DEFAULT "0",
+  isDisabled BOOLEAN DEFAULT FALSE,
   FOREIGN KEY(user_id) REFERENCES users(user_id)
 );
 
@@ -152,7 +153,8 @@ VALUES
     "1x Lasagna, 2x Coca Cola 450",
     "Tarjeta",
     11500,
-    1
+    1,
+    FALSE
   ),
   (
     NULL,
@@ -161,7 +163,8 @@ VALUES
     "4x Coca Cola 450",
     "Efectivo",
     10000,
-    2
+    2,
+    FALSE
   ),
   (
     NULL,
@@ -170,7 +173,8 @@ VALUES
     "2x Tostadas a la Francesa",
     "Efectivo",
     6530,
-    3
+    3,
+    FALSE
   ),
   (
     NULL,
@@ -179,7 +183,8 @@ VALUES
     "2x Lasagna",
     "Tarjeta",
     18000,
-    2
+    2,
+    FALSE
   ),
   (
     NULL,
@@ -188,7 +193,8 @@ VALUES
     "3x Salchipapa",
     "Tarjeta",
     17400,
-    1
+    1,
+    FALSE
   ),
   (
     NULL,
@@ -197,7 +203,8 @@ VALUES
     "1x Salchipapa, 1x Coca Cola 450",
     "Efectivo",
     8300,
-    3
+    3,
+    FALSE
   );
 
 
