@@ -218,7 +218,7 @@ server.get("/delilah/v1/users", validateToken, async (req, res) => {
     
 
 ///Endpoint para crear usuarios
-server.post("/delilah/v1/users", async (req, res) => {
+server.post("/delilah/v1/users", validarUser, validarPass, validarNames, validarAddress, validarEmail, validarPhone, async (req, res) => {
 	const { username, password, email, address, fullName, phone } = req.body;	
 	try {
 		const userBD = await obtenerDatosBD("users", "user_name", username);

@@ -1,0 +1,598 @@
+swagger: "2.0"
+info:
+  description: "Creación de un sistema de pedidos online para un restaurante - Backend API"
+  version: "1.0.0"
+  title: "Delilah Restó"
+  contact:
+    email: "admin@mafhz.com.co"
+externalDocs:
+  description: "Repositorio de GitHub"
+  url: "https://github.com"
+host: "localhost:3000"
+basePath: "/delilah/v1"
+tags:
+- name: "usuarios"
+  description: "Realizar acciones con los usuarios"
+- name: "productos"
+  description: "Realizar acciones sobre los productos"
+- name: "ordenes"
+  description: "Realizar acciones sobre las ordenes"
+
+schemes:
+- "https"
+- "http"
+paths:
+  /usuarios:
+    get:
+      tags:
+      - "usuarios"
+      summary: "Obtiene todos los usuarios registrados (Solo administrador)"
+      operationId: "obtenerUsuarios"
+      produces:
+      #- "application/xml"
+      - "application/json"
+      parameters:
+      - name: "body"
+        in: "body"
+        description: "Token de administrador"
+        required: true
+        schema:
+          $ref: "#/details/schemas/Token"
+      responses:
+        "200":
+          description: "Operación exitosa"
+          schema:
+            $ref: "#/details/schemas/Usuario"
+        "400":
+          description: "Token inválido"
+        
+    post:
+      tags:
+      - "usuarios"
+      summary: "Crear usuarios"
+      operationId: "crearUsuario"
+      produces:
+      #- "application/xml"
+      - "application/json"
+      parameters:
+      - name: "body"
+        in: "body"
+        description: "Crea un usuario en la base de datos"
+        required: true
+        schema:
+          $ref: "#/details/schemas/Usuario"
+      security: []
+      responses:
+        "200":
+          description: "Usuario registrado con exito"
+        "400":
+          description: "Falta un campo de información para realizar el registro"
+        "409":
+          description: "Usuario o correo ya se encuentra en uso"
+            
+    put:
+      tags:
+      - "usuarios"
+      summary: "Edita los datos del usuario por medio del token"
+      operationId: "editarUsuario"
+      produces:
+        #- "application/xml"
+        - "application/json"
+      parameters:
+        - name: "body"
+          in: "body"
+          description: "Token de usuario"
+          required: true
+          schema:
+            allOf:
+              - $ref: "#/details/schemas/Token"
+            type: object
+            properties:
+              data:
+                $ref: "#/details/schemas/Usuario"
+      responses:
+        "200":
+          description: "Operación exitosa"
+        "400":
+          description: "Token inválido"
+        "401":
+          description: "La cuenta se encuentra deshabilitada"
+        "409":
+          description: "Usuario o correo ya se encuentra registrado"
+          
+    delete:
+      tags:
+      - "usuarios"
+      summary: "(Inhabilita) Elimina la cuenta"
+      operationId: "eliminarUsuario"
+      produces:
+        #- "application/xml"
+        - "application/json"
+      parameters:
+        - name: "body"
+          in: "body"
+          description: "Token de usuario"
+          required: true
+          schema:
+            $ref: "#/details/schemas/Token"
+      responses:
+        "200":
+          description: "Operación exitosa"
+        "401":
+          description: "Token inválido"
+          
+  /usuarios/ingresar:
+    get:
+      tags:
+      - "usuarios"
+      summary: "Iniciar sesion"
+      operationId: "sesionUsuario"
+      produces:
+      #- "application/xml"
+      - "application/json"
+      parameters:
+      - name: "Usuario o correo"
+        in: "query"
+        description: "Usuario o correo para iniciar sesión"
+        required: true
+        type: string
+      - name: "Contraseña"
+        in: "query"
+        description: "Contraseña para iniciar sesión."
+        required: true
+        type: string
+      responses:
+        "200":
+          description: "Ingreso exitoso"
+          schema:
+            $ref: "#/details/schemas/Token"
+        "400":
+          description: "Usuario o contraseña incorrectos"
+        "401":
+          description: "la cuenta se encuentra deshabilitada"
+    
+  /usuarios/:usuario:
+    get:
+      tags:
+      - "usuarios"
+      summary: "Obtiene el usuario por su nombre solo aplica para el Administrador"
+      operationId: "obtenerUsuarioAdmin"
+      produces:
+        #- "application/xml"
+        - "application/json"
+      parameters:
+        - name: "usuarios"
+          in: "path"
+          description: "Se ingresa el nombre a buscar"
+          required: true
+          type: "string"
+      responses:
+        "200":
+          description: "Busqueda exitosa"
+          schema:
+            $ref: "#/details/schemas/Usuario"
+        "404":
+          description: "El usuario ingresado es incorrecto o no existe"
+          
+    put:
+      tags:
+      - "usuarios"
+      summary: "Actualiza el usuario por su nombre solo aplica para el Administrador"
+      operationId: "ActualizarUsuarioAdmin"
+      produces:
+        #- "application/xml"
+        - "application/json"
+      parameters:
+        - name: "usuarios"
+          in: "path"
+          description: "Se ingresa el nombre a buscar"
+          required: true
+          type: "string"
+        - name: "body"
+          in: "body"
+          description: "Actualiza el usuario"
+          required: true
+          schema:
+            allOf:
+              - $ref: "#/details/schemas/Token"
+              - type: "object"
+                properties:
+                  data:
+                    $ref: "#/details/schemas/Usuario"
+      responses:
+        "200":
+          description: "Se actualizó correctamente el usuario"
+        "400":
+          description: "Debe haber un campo para actualizar"
+        "404":
+          description: "El usuario ingresado es incorrecto o no existe"
+          
+    delete:
+      tags:
+      - "usuarios"
+      summary: "Elimina un usuario por su nombre solo aplica para el Administrador"
+      operationId: "EliminarUsuarioAdmin"
+      produces:
+        #- "application/xml"
+        - "application/json"
+      parameters:
+        - name: "usuarios"
+          in: "path"
+          description: "Se ingresa el nombre a eliminar"
+          required: true
+          type: "string"
+      responses:
+        "200":
+          description: "Usuario eliminado correctamente"
+        "404":
+          description: "El usuario ingresado es incorrecto o no existe"
+          
+  /productos:
+    get:
+      tags:
+      - "productos"
+      summary: "Obtiene la lista de los productos"
+      operationId: "obtenerProducto"
+      produces:
+      #- "application/xml"
+      - "application/json"
+      parameters:
+      - name: "Consulta"
+        in: "query"
+        description: "Realiza una consulta en la BD y trae los datos"
+        type: string
+      - in: "body"
+        name: "body"
+        description: "Token necesario para traer los datos"
+        required: true
+        schema:
+          $ref: "#/details/schemas/Token"
+      responses:
+        "200":
+          description: "Operación exitosa"
+          schema:
+            $ref: "#/details/schemas/Producto"
+        "400":
+          description: "Token invalido"
+          
+    post:
+      tags:
+      - "productos"
+      summary: "Agrega un producto en la base de datos (Solo aplica para el administrador)"
+      operationId: "agregarProducto"
+      produces:
+      #- "application/xml"
+      - "application/json"
+      parameters:
+      - name: "body"
+        in: "body"
+        description: "Parametros del producto para agregar"
+        required: true
+        schema:
+          allOf:
+            - $ref: "#/details/schemas/Token"
+            - $ref: "#/details/schemas/Producto"
+      responses:
+        "200":
+          description: "Producto agregado correctamente"
+          schema:
+            $ref: "#/details/schemas/Producto"
+        "400":
+          description: "Necesita privilegios de administrador para agregar productos"
+        "404":
+          description: "Todos los campos son obligatorios"
+          
+  /productos/id:
+    get:
+      tags:
+      - "productos"
+      summary: "Obtiene la lista de los productos por el ID"
+      operationId: "obtenerProductoId"
+      produces:
+      #- "application/xml"
+      - "application/json"
+      parameters:
+      - name: "ID"
+        in: "path"
+        description: "Se ingresa el ID del producto a buscar"
+        required: true
+        type: "integer"
+      - in: "body"
+        name: "body"
+        description: "Token necesario para traer los datos"
+        required: true
+        schema:
+          $ref: "#/details/schemas/Token"
+      responses:
+        "200":
+          description: "Operación exitosa"
+          schema:
+            $ref: "#/details/schemas/Producto"
+        "400":
+          description: "Token invalido"
+        "404":
+          description: "El producto no existe"
+          
+    put:
+      tags:
+      - "productos"
+      summary: "Edita un producto en especifico (Solo Administrador)"
+      operationId: "editarProductoId"
+      produces:
+      #- "application/xml"
+      - "application/json"
+      parameters:
+      - name: "ID"
+        in: "path"
+        description: "Se ingresa el ID del producto a editar"
+        required: true
+        type: "integer"
+      - in: "body"
+        name: "body"
+        description: "Token de administrador para actualizar los productos"
+        required: true
+        schema:
+            allOf:
+              - $ref: "#/details/schemas/Token"
+              - type: object
+                properties:
+                  data:
+                    $ref: "#/details/schemas/Producto"
+      responses:
+        "200":
+          description: "Operación exitosa"
+        "400":
+          description: "Token invalido"
+        "404":
+          description: "El producto no existe y por lo menos debe haber un parametro para actualizar"
+          
+    delete:
+      tags:
+      - "productos"
+      summary: "Elimina un producto en especifico (Solo Administrador)"
+      operationId: "eliminarProductoId"
+      produces:
+      #- "application/xml"
+      - "application/json"
+      parameters:
+      - name: "ID"
+        in: "path"
+        description: "Se ingresa el ID del producto a eliminar"
+        required: true
+        type: "integer"
+      - in: "body"
+        name: "body"
+        description: "Token de administrador para eliminar los productos"
+        required: true
+        schema:
+            $ref: "#/details/schemas/Token"
+      responses:
+        "200":
+          description: "Operación exitosa"
+        "400":
+          description: "Token invalido"
+        "404":
+          description: "El producto ingresado no existe"
+          
+  /ordenes:
+    get:
+      tags:
+      - "ordenes"
+      summary: "Obtiene la lista de las ordenes del usuario logueado"
+      operationId: "obtenerOrden"
+      produces:
+      #- "application/xml"
+      - "application/json"
+      parameters:
+      - in: "body"
+        name: "body"
+        description: "Token necesario para traer los datos"
+        required: true
+        schema:
+          $ref: "#/details/schemas/Token"
+      responses:
+        "200":
+          description: "Operación exitosa"
+          schema:
+            $ref: "#/details/schemas/Orden"
+        "400":
+          description: "Token invalido"
+          
+    post:
+      tags:
+      - "ordenes"
+      summary: "Generar una orde nueva"
+      operationId: "agregarOrden"
+      produces:
+      #- "application/xml"
+      - "application/json"
+      parameters:
+      - name: "Orden"
+        in: "body"
+        description: "Crear una orden"
+        required: true
+        schema:
+          allOf:
+            - $ref: "#/details/schemas/Token"
+            - $ref: "#/details/schemas/Orden"
+      responses:
+        "200":
+          description: "Orden generada"
+          schema:
+            $ref: "#/details/schemas/Orden"
+        "400":
+          description: "Se ha ingresado datos erroneos"
+        "404":
+          description: "Todos los campos son obligatorios"
+          
+  /ordenes/id:
+    get:
+      tags:
+      - "ordenes"
+      summary: "Obtiene la lista de ordenes por el ID (Solo administrador)"
+      operationId: "obtenerOrdenId"
+      produces:
+      #- "application/xml"
+      - "application/json"
+      parameters:
+      - name: "ID"
+        in: "path"
+        description: "Se ingresa el ID de la orden a buscar"
+        required: true
+        type: "integer"
+      - in: "body"
+        name: "body"
+        description: "Token necesario para traer los datos"
+        required: true
+        schema:
+          $ref: "#/details/schemas/Token"
+      responses:
+        "200":
+          description: "Operación exitosa"
+          schema:
+            $ref: "#/details/schemas/Orden"
+        "400":
+          description: "Token invalido"
+        "404":
+          description: "La orden no existe"
+          
+    put:
+      tags:
+      - "ordenes"
+      summary: "Edita el estado de la orden (Solo Administrador)"
+      operationId: "editarOrdenId"
+      produces:
+      #- "application/xml"
+      - "application/json"
+      parameters:
+      - name: "ID"
+        in: "path"
+        description: "Se ingresa el ID de la orden a editar"
+        required: true
+        type: "integer"
+      - in: "body"
+        name: "body"
+        description: "Token de administrador para actualizar los productos"
+        required: true
+        schema:
+            allOf:
+              - $ref: "#/details/schemas/Token"
+              - $ref: "#/details/schemas/EstadoOrden"
+      responses:
+        "200":
+          description: "Operación exitosa"
+        "400":
+          description: "Token invalido"
+        "404":
+          description: "La orden no existe."
+          
+    delete:
+      tags:
+      - "ordenes"
+      summary: "Elimina la orden con el ID (Solo Administrador)"
+      operationId: "eliminarOrdenId"
+      produces:
+      #- "application/xml"
+      - "application/json"
+      parameters:
+      - name: "ID"
+        in: "path"
+        description: "Se ingresa el ID del producto a eliminar"
+        required: true
+        type: "integer"
+      - in: "body"
+        name: "body"
+        description: "Token de administrador para eliminar las ordenes"
+        required: true
+        schema:
+            $ref: "#/details/schemas/Token"
+      responses:
+        "200":
+          description: "Operación exitosa"
+        "400":
+          description: "Token invalido"
+        "404":
+          description: "la orden ingresada no existe"
+          
+details:
+  schemas:
+    Usuario:
+      type: "object"
+      properties:
+        username:
+          type: "string"
+          example: "Mafhz"
+        fullName:
+          type: "string"
+          example: "Martín Felipe Henríquez"
+        email:
+          type: "string"
+          example: "admin@mafhz.com.co"
+        phone:
+          type: "integer"
+          example: 111111111
+        myAddress:
+          type: "string"
+          example: "Calle 7"
+        password:
+          type: "string"
+          example: "12345678"
+    Producto:
+      type: "object"
+      properties:
+        id:
+          type: "integer"
+          example: 1
+        name_product:
+          type: "string"
+          example: "Tostadas a la francesa"
+        price:
+          type: "number"
+          example: 250
+        image_product:
+          type: "string"
+          example: "https://via.placeholder.com/150"
+        description:
+          type: "string"
+          example: "Pan tajado cubierto en huevo revuelto, acompañado con queso"    
+    Orden:
+      type: "object"
+      properties:
+        id:
+          type: "integer"
+          example: 1
+        client:
+          type: "integer"
+          example: 1
+        data:
+          $ref: "#/details/schemas/Producto"
+        total:
+          type: "integer"
+          example: 250
+        way_to_pay:
+          type: "string"
+          example: "Efectivo"
+        order_state:
+          type: "string"
+          example: "Preparando"
+    EstadoOrden:
+      type: "object"
+      properties:
+        order_state:
+          type: "string"
+          example: "Preparando"
+    Token:
+      type: object
+      properties:
+        token:
+          type: string
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyIjoiZ3VpZG90b3JyZXMiLCJpZCI6MSwiaXNEaXNhYmxlZCI6MCwiaWF0IjoxNjA2MDc1MTIyLCJleHAiOjE2MDYwNzgxMjJ9.adS5OZVaZ259fwuiWW6YcIbdFg8O7Av9zztKgreGjbk"
+
+  securitySchemes:
+    Bearer:
+      type: "apiKey"
+      name: "Authorization"
+      in: "header"
+
+security:
+  - bearerAuth: []
