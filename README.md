@@ -26,7 +26,7 @@
 
 ## Documentación
 
-Abrir el archivo con extensión .yaml en [Swagger](https://editor.swagger.io/ "Swagger"). Allí encontraran los respectivos Endpoints e información del proyecto.
+Abrir el archivo con extensión .yml en [Swagger](https://editor.swagger.io/ "Swagger"). Allí encontraran los respectivos Endpoints e información del proyecto.
 
 ## Ejecución del proyecto
 
